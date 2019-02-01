@@ -1,0 +1,12 @@
+name: cutpointr_shiny
+title: cutpointr_shiny
+username:
+account: thie1e
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 676410
+bundleId: 1846301
+url: https://thie1e.shinyapps.io/cutpointr_shiny/
+when: 1548869908.01414
+asMultiple: FALSE
+asStatic: FALSE
