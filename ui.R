@@ -5,6 +5,7 @@ library(ggplot2)
 library(tibble)
 library(dplyr)
 library(markdown)
+library(tidyr)
 
 header <- dashboardHeader(title = "cutpointr")
 
@@ -12,14 +13,14 @@ sidebar <- dashboardSidebar(width = 300, sidebarMenu(
     menuItem("Data Upload", tabName = "data", icon = icon("table")),
     menuItem("Calculate Cutpoints", tabName = "cutpoints", icon = icon("cut")),
     menuItem("Bootstrapping", tabName = "bootstrapping", icon = icon("repeat")),
-    menuItem("Simulation", tabName = "simulation", icon = icon("bar-chart")),
+    menuItem("Simulation / Sample Size Planning", tabName = "simulation", icon = icon("bar-chart")),
     menuItem("About", tabName = "about", icon = icon("info"))
 ))
 
 data_tab <- tabItem(tabName = "data",
                     fluidRow(
                         box(title = "Introduction", solidHeader = TRUE,
-                            status = "warning", width = 8,
+                            status = "warning", width = 9,
                             helpText("Select tasks in the menu on the left.
                                      Start with uploading data or get to know
                                      the app by using the example data that is
@@ -201,14 +202,15 @@ bootstrap_tab <- tabItem(tabName = "bootstrapping",
                         box(
                             title = "Bootstrap parameters",
                             solidHeader = TRUE, status = "warning",
-                            sliderInput("boot_runs", "Bootstrap repeats",
-                                        min = 0, max = 1000, value = 0,
-                                        step = 1, round = TRUE
+                            numericInput("boot_runs", "Bootstrap repeats (30 to 10,000)",
+                                        min = 30, max = 10000, value = 300,
+                                        step = 1
                             ),
                             numericInput("boot_seed", "Seed (for reproducing the result)",
                                         min = 0, max = 999999, value = 100,
                                         step = 1
                             ),
+                            actionButton("start_bootstrap", "Start"),
                             width = 6
                         ),
                         conditionalPanel(condition = "input.boot_runs > 0",
@@ -234,106 +236,209 @@ bootstrap_tab <- tabItem(tabName = "bootstrapping",
 )
 
 sim_tab <- tabItem(tabName = "simulation",
-                    fluidRow(
-                        box(
-                            title = "Negative class",
-                            solidHeader = TRUE, status = "warning",
-                            numericInput("sim_n_cont", "Number of controls",
-                                        value = 100, min = 2, max = 10000,
-                                        step = 1
-                            ),
-                            numericInput("sim_m_cont", "Mean value of controls",
-                                        value = 100, min = -10000, max = 10000,
-                                        step = 0.01
-                            ),
-                            numericInput("sim_sd_cont", "Standard deviation of value of controls",
-                                        value = 15, min = -10000, max = 10000,
-                                        step = 0.01
-                            )
-                        ),
-                        box(
-                            title = "Positive class",
-                            solidHeader = TRUE, status = "warning",
-                            numericInput("sim_n_dis", "Number of cases",
-                                        value = 15, min = 2, max = 10000,
-                                        step = 1
-                            ),
-                            numericInput("sim_m_dis", "Mean value of cases",
-                                        value = 130, min = -10000, max = 10000,
-                                        step = 0.01
-                            ),
-                            numericInput("sim_sd_dis", "Standard deviation of value of cases",
-                                        value = 15, min = -10000, max = 10000,
-                                        step = 0.01
-                            )
-                        ),
-                        box(
-                            title = "Simulation parameters",
-                            solidHeader = TRUE, status = "warning",
-                            numericInput("sim_repeats", "Number of simulation runs",
-                                        value = 100, min = 10, max = 10000,
-                                        step = 1
-                            ),
-                            numericInput("sim_seed", "Seed (for reproducing the result)",
-                                        value = 100, min = 1, max = 999999,
-                                        step = 1
-                            ),
-                            width = 6
-                        ),
-                        box(
-                            title = "Optimal cutpoint",
-                            solidHeader = TRUE, status = "warning",
-                            selectInput("sim_method", "Method",
-                                         choices = list("minimize_metric",
-                                                        "maximize_metric",
-                                                        "oc_youden_normal",
-                                                        "oc_youden_kernel"),
-                                         selected = "maximize_metric"),
-                            width = 6,
-                            conditionalPanel(condition = "input.sim_method == 'oc_OptimalCutpoints'",
-                                             selectInput('sim_oc_metric', 'Metric for OptimalCutpoints',
-                                                         choices = list("ROC01",
-                                                                        "Youden",
-                                                                        "PROC01"),
-                                                         selected = "Youden")
-                            ),
-                            conditionalPanel(condition = "input.sim_method == 'maximize_metric'",
-                                             selectInput('sim_metric', 'Metric',
-                                                         choices = list("accuracy",
-                                                                        "youden",
-                                                                        "sum_sens_spec",
-                                                                        "cohens_kappa",
-                                                                        "abs_d_sesp",
-                                                                        "odds_ratio"),
-                                                         selected = "sum_sens_spec")
-                            ),
-                            conditionalPanel(condition = "input.sim_method == 'minimize_metric'",
-                                             selectInput('sim_metric', 'Metric',
-                                                         choices = list("accuracy",
-                                                                        "youden",
-                                                                        "sum_sens_spec",
-                                                                        "cohens_kappa",
-                                                                        "abs_d_sesp",
-                                                                        "odds_ratio"),
-                                                         selected = "abs_d_sesp")
-                            )
-                        ),
-                        box(
-                            width = 12,
-                            plotOutput("simplot_distrs")
-                        ),
-                        box(
-                            width = 12,
-                            plotOutput("simplot_cutvar")
-                        )
-                    )
+                   box(title = "Introduction", solidHeader = TRUE,
+                       status = "warning", width = 9,
+                       helpText("You can define distributions for both classes here
+                                and simulate the cutpoint estimation. Pick the
+                                number of repetitions and the method for cutpoint
+                                estimation below. The chosen distributions
+                                are shown in the 'Distribution' tab under 'Simulation
+                                Output'. To start the
+                                simulation, switch to the 'Cutpoint Distribution' tab
+                                and click 'Start simulation'.
+                                For sample size planning, first set the distributions
+                                to realistic values and then tweak the group sizes
+                                until a desired width of the confidence interval
+                                is reached.")),
+                   box(
+                       title = "Simulation parameters",
+                       solidHeader = TRUE, status = "warning",
+                       numericInput("sim_repeats", "Number of simulation runs",
+                                    value = 300, min = 10, max = 10000,
+                                    step = 1
+                       ),
+                       numericInput("sim_seed", "Seed (for reproducing the result)",
+                                    value = 100, min = 1, max = 999999,
+                                    step = 1
+                       ),
+                       width = 6
+                   ),
+                   box(
+                       title = "Optimal cutpoint",
+                       solidHeader = TRUE, status = "warning",
+                       selectInput("sim_method", "Method",
+                                   choices = list("minimize_metric",
+                                                  "maximize_metric",
+                                                  "oc_youden_normal",
+                                                  "oc_youden_kernel"),
+                                   selected = "maximize_metric"),
+                       width = 6,
+                       conditionalPanel(condition = "input.sim_method == 'maximize_metric'",
+                                        selectInput('sim_metric', 'Metric',
+                                                    choices = list("accuracy",
+                                                                   "youden",
+                                                                   "sum_sens_spec",
+                                                                   "prod_sens_spec",
+                                                                   "cohens_kappa",
+                                                                   "abs_d_sens_spec",
+                                                                   "abs_d_ppv_npv",
+                                                                   "prod_ppv_npv",
+                                                                   "sum_ppv_npv",
+                                                                   "prod_sens_spec",
+                                                                   "roc01",
+                                                                   "F1_score",
+                                                                   "odds_ratio"),
+                                                    selected = "sum_sens_spec")
+                       ),
+                       conditionalPanel(condition = "input.sim_method == 'minimize_metric'",
+                                        selectInput('sim_metric', 'Metric',
+                                                    choices = list("accuracy",
+                                                                   "youden",
+                                                                   "sum_sens_spec",
+                                                                   "prod_sens_spec",
+                                                                   "cohens_kappa",
+                                                                   "abs_d_sens_spec",
+                                                                   "abs_d_ppv_npv",
+                                                                   "prod_ppv_npv",
+                                                                   "sum_ppv_npv",
+                                                                   "prod_sens_spec",
+                                                                   "roc01",
+                                                                   "F1_score",
+                                                                   "odds_ratio"),
+                                                    selected = "abs_d_sesp")
+                       )
+                   ),
+                   box(
+                       title = "Negative class",
+                       solidHeader = TRUE, status = "warning",
+                       numericInput("sim_n_cont", "Number of controls",
+                                    value = 100, min = 2, max = 10000,
+                                    step = 1
+                       ),
+                       selectInput("neg_distr", "Distribution",
+                                   choices = list("Normal",
+                                                  "Lognormal",
+                                                  "Gamma")),
+                       conditionalPanel(condition = "input.neg_distr == 'Normal'",
+                                        numericInput("sim_m_cont", "Mean value of controls",
+                                                     value = 100, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_sd_cont", "Standard deviation of controls",
+                                                     value = 15, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )),
+                       conditionalPanel(condition = "input.neg_distr == 'Lognormal'",
+                                        numericInput("sim_mlog_cont", "Log mean value of controls",
+                                                     value = 0, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_sdlog_cont", "Log standard deviation of controls",
+                                                     value = 1, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )),
+                       conditionalPanel(condition = "input.neg_distr == 'Gamma'",
+                                        numericInput("sim_shape_cont", "Shape parameter of controls",
+                                                     value = 2, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_rate_cont", "Rate parameter of controls",
+                                                     value = 1, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )
+                       )
+                   ),
+                   box(
+                       title = "Positive class",
+                       solidHeader = TRUE, status = "warning",
+                       numericInput("sim_n_dis", "Number of cases",
+                                    value = 100, min = 2, max = 10000,
+                                    step = 1
+                       ),
+                       selectInput("pos_distr", "Distribution",
+                                   choices = list("Normal",
+                                                  "Lognormal",
+                                                  "Gamma")),
+                       conditionalPanel(condition = "input.pos_distr == 'Normal'",
+                                        numericInput("sim_m_dis", "Mean value of cases",
+                                                     value = 120, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_sd_dis", "Standard deviation of cases",
+                                                     value = 15, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )),
+                       conditionalPanel(condition = "input.pos_distr == 'Lognormal'",
+                                        numericInput("sim_mlog_dis", "Log mean value of cases",
+                                                     value = 1, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_sdlog_dis", "Log standard deviation of cases",
+                                                     value = 1, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )),
+                       conditionalPanel(condition = "input.pos_distr == 'Gamma'",
+                                        numericInput("sim_shape_dis", "Shape parameter of cases",
+                                                     value = 4, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        ),
+                                        numericInput("sim_rate_dis", "Rate parameter of cases",
+                                                     value = 1, min = -10000, max = 10000,
+                                                     step = 0.01
+                                        )
+                       )
+                   ),
+                   # box(title = "Start simulation here",
+                   #     solidHeader = TRUE, status = "warning", width = 12,
+                   #     actionButton("start_sim", "Start")
+                   # ),
+                   box(title = "Simulation output",
+                       width = 12, status = "warning", solidHeader = TRUE,
+                       tabBox(id = "sim_output", width = 12,
+                              tabPanel("Distributions",
+                                       box(
+                                           numericInput("lower_percentile_cont",
+                                                        "Controls: Lower percentile to include in the plot",
+                                                        value = 0.01, min = 0.00001, max = 0.9999,
+                                                        step = 0.001
+                                           ),
+                                           numericInput("upper_percentile_cont",
+                                                        "Controls: Upper percentile to include in the plot",
+                                                        value = 0.99, min = 0.00001, max = 0.9999,
+                                                        step = 0.001
+                                           )
+                                       ),
+                                       box(
+                                           numericInput("lower_percentile_pat",
+                                                        "Cases: Lower percentile to include in the plot",
+                                                        value = 0.01, min = 0.00001, max = 0.9999,
+                                                        step = 0.001
+                                           ),
+                                           numericInput("upper_percentile_pat",
+                                                        "Cases: Upper percentile to include in the plot",
+                                                        value = 0.99, min = 0.00001, max = 0.9999,
+                                                        step = 0.001
+                                           )
+                                       ),
+                                       downloadButton('download_simplot_distrs', 'Download Plot'),
+                                       plotOutput("simplot_distrs")
+                              ),
+                              tabPanel("Cutpoint Distribution",
+                                       actionButton("start_sim", "Start simulation"),
+                                       downloadButton('download_simplot_cutvar', 'Download Plot'),
+                                       plotOutput("simplot_cutvar"),
+                                       tableOutput("sim_table")
+                              )
+                       )
+                   )
 )
 
 about_tab <- tabItem(tabName = "about",
-                    fluidRow(
-                        box(
-                            includeMarkdown("about.md")
-                        )
+                     fluidRow(
+                         box(
+                             includeMarkdown("about.md"),
+                             width = 9
+                         )
                     )
 )
 
