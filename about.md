@@ -4,6 +4,10 @@
 
 The Simulation tab can be used to run simple simulation studies for assessing the variability of an optimal cutpoint depending on the effect size (the distributions of positive and negative cases), the metric and the cutpoint estimation method.
 
-For more info see https://github.com/Thie1e/cutpointr. 
+More details on the package and the optimization methods are given in Thiele, C., & Hirschfeld, G. (2021). cutpointr: Improved Estimation and Validation of Optimal Cutpoints in R. Journal of Statistical Software, 98(11), 1–27. https://doi.org/10.18637/jss.v098.i11
 
-Supported by BMBF Indimed.
+Readme and code can be found on Github: https://github.com/Thie1e/cutpointr
+
+Contact the author: christian.thiele (at) fh-bielefeld.de
+
+Supported by BMBF Indimed (grant 01EK1501).
